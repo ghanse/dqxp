@@ -80,41 +80,47 @@ class MetaWriter:
 
             if in_source and in_target:
                 result = "PASS" if (src_type == tgt_type and counts_match) else "FAIL"
-                rows.append((
-                    table_name,
-                    col_name,
-                    col_name,
-                    src_type,
-                    tgt_type,
-                    source_col_count,
-                    target_col_count,
-                    result,
-                    run_date,
-                ))
+                rows.append(
+                    (
+                        table_name,
+                        col_name,
+                        col_name,
+                        src_type,
+                        tgt_type,
+                        source_col_count,
+                        target_col_count,
+                        result,
+                        run_date,
+                    )
+                )
             elif in_source and not in_target:
-                rows.append((
-                    table_name,
-                    col_name,
-                    None,
-                    src_type,
-                    None,
-                    source_col_count,
-                    target_col_count,
-                    "FAIL",
-                    run_date,
-                ))
+                rows.append(
+                    (
+                        table_name,
+                        col_name,
+                        None,
+                        src_type,
+                        None,
+                        source_col_count,
+                        target_col_count,
+                        "FAIL",
+                        run_date,
+                    )
+                )
             else:
-                rows.append((
-                    table_name,
-                    None,
-                    col_name,
-                    None,
-                    tgt_type,
-                    source_col_count,
-                    target_col_count,
-                    "FAIL",
-                    run_date,
-                ))
+                rows.append(
+                    (
+                        table_name,
+                        None,
+                        col_name,
+                        None,
+                        tgt_type,
+                        source_col_count,
+                        target_col_count,
+                        "FAIL",
+                        run_date,
+                    )
+                )
 
         if not rows:
             return spark.createDataFrame([], self.schema)
