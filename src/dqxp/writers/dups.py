@@ -3,7 +3,6 @@ from __future__ import annotations
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import IntegerType, StringType, StructField, StructType, TimestampType
 
-
 DUPS_SCHEMA = StructType(
     [
         StructField("unique_key", StringType(), nullable=False),

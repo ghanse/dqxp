@@ -39,37 +39,58 @@ class TestWriterSchemas:
     def test_mismatch_schema_field_names(self):
         names = [f.name for f in MISMATCH_SCHEMA.fields]
         assert names == [
-            "unique_key", "column_name", "source_value", "target_value",
-            "mismatch_type", "table_name", "run_date", "result",
+            "unique_key",
+            "column_name",
+            "source_value",
+            "target_value",
+            "mismatch_type",
+            "table_name",
+            "run_date",
+            "result",
         ]
 
     def test_meta_schema_field_names(self):
         names = [f.name for f in META_SCHEMA.fields]
         assert names == [
-            "table_name", "source_column_name", "target_column_name",
-            "source_data_type", "target_data_type",
-            "source_column_count", "target_column_count",
-            "result", "run_date",
+            "table_name",
+            "source_column_name",
+            "target_column_name",
+            "source_data_type",
+            "target_data_type",
+            "source_column_count",
+            "target_column_count",
+            "result",
+            "run_date",
         ]
 
     def test_dups_schema_field_names(self):
         names = [f.name for f in DUPS_SCHEMA.fields]
         assert names == [
-            "unique_key", "table_name", "dataset",
-            "duplicate_count", "run_date", "result",
+            "unique_key",
+            "table_name",
+            "dataset",
+            "duplicate_count",
+            "run_date",
+            "result",
         ]
 
     def test_count_schema_field_names(self):
         names = [f.name for f in COUNT_SCHEMA.fields]
         assert names == [
-            "table_name", "source_count", "target_count",
-            "count_difference", "threshold", "result", "run_date",
+            "table_name",
+            "source_count",
+            "target_count",
+            "count_difference",
+            "threshold",
+            "result",
+            "run_date",
         ]
 
 
 class TestWriterStubs:
     def test_mismatch_writer_returns_empty_df(self, spark):
         from dqxp.writers.mismatch import MismatchWriter
+
         writer = MismatchWriter()
         source = spark.createDataFrame([], StructType([]))
         target = spark.createDataFrame([], StructType([]))
@@ -79,6 +100,7 @@ class TestWriterStubs:
 
     def test_meta_writer_returns_empty_df(self, spark):
         from dqxp.writers.meta import MetaWriter
+
         writer = MetaWriter()
         source = spark.createDataFrame([], StructType([]))
         target = spark.createDataFrame([], StructType([]))
@@ -88,6 +110,7 @@ class TestWriterStubs:
 
     def test_dups_writer_returns_empty_df(self, spark):
         from dqxp.writers.dups import DupsWriter
+
         writer = DupsWriter()
         source = spark.createDataFrame([], StructType([]))
         target = spark.createDataFrame([], StructType([]))
@@ -97,6 +120,7 @@ class TestWriterStubs:
 
     def test_count_writer_returns_empty_df(self, spark):
         from dqxp.writers.count import CountWriter
+
         writer = CountWriter()
         source = spark.createDataFrame([], StructType([]))
         target = spark.createDataFrame([], StructType([]))
@@ -107,10 +131,12 @@ class TestWriterStubs:
 
 class TestApplyChecksAndSaveOutputTables:
     def test_calls_engine_and_returns_all_tables(self, spark, extension, mock_engine):
-        schema = StructType([
-            StructField("id", IntegerType()),
-            StructField("name", StringType()),
-        ])
+        schema = StructType(
+            [
+                StructField("id", IntegerType()),
+                StructField("name", StringType()),
+            ]
+        )
         source = spark.createDataFrame([(1, "alice"), (2, "bob")], schema)
         target = spark.createDataFrame([(1, "alice"), (3, "carol")], schema)
         good = spark.createDataFrame([(1, "alice")], schema)
@@ -119,7 +145,10 @@ class TestApplyChecksAndSaveOutputTables:
         mock_engine.apply_checks_and_split.return_value = (good, bad)
 
         result = extension.apply_checks_and_save_output_tables(
-            source, target, checks=[], key_columns=["id"],
+            source,
+            target,
+            checks=[],
+            key_columns=["id"],
         )
 
         mock_engine.apply_checks_and_split.assert_called_once_with(source, [])
@@ -133,7 +162,10 @@ class TestApplyChecksAndSaveOutputTables:
         target = spark.createDataFrame([], schema)
         with pytest.raises(ValueError, match="key_columns must not be empty"):
             extension.apply_checks_and_save_output_tables(
-                source, target, checks=[], key_columns=[],
+                source,
+                target,
+                checks=[],
+                key_columns=[],
             )
 
     def test_rejects_negative_threshold(self, spark, extension, mock_engine):
@@ -142,14 +174,20 @@ class TestApplyChecksAndSaveOutputTables:
         target = spark.createDataFrame([], schema)
         with pytest.raises(ValueError, match="threshold must be non-negative"):
             extension.apply_checks_and_save_output_tables(
-                source, target, checks=[], key_columns=["id"], threshold=-1.0,
+                source,
+                target,
+                checks=[],
+                key_columns=["id"],
+                threshold=-1.0,
             )
 
     def test_quarantine_raises_not_implemented(self, spark, extension, mock_engine):
-        schema = StructType([
-            StructField("id", IntegerType()),
-            StructField("name", StringType()),
-        ])
+        schema = StructType(
+            [
+                StructField("id", IntegerType()),
+                StructField("name", StringType()),
+            ]
+        )
         source = spark.createDataFrame([(1, "alice")], schema)
         target = spark.createDataFrame([(1, "alice")], schema)
         good = spark.createDataFrame([], schema)
@@ -159,15 +197,20 @@ class TestApplyChecksAndSaveOutputTables:
 
         with pytest.raises(NotImplementedError, match="not yet implemented"):
             extension.apply_checks_and_save_output_tables(
-                source, target, checks=[], key_columns=["id"],
+                source,
+                target,
+                checks=[],
+                key_columns=["id"],
                 quarantine_table="catalog.schema.quarantine",
             )
 
     def test_passes_ref_dfs_to_engine(self, spark, extension, mock_engine):
-        schema = StructType([
-            StructField("id", IntegerType()),
-            StructField("name", StringType()),
-        ])
+        schema = StructType(
+            [
+                StructField("id", IntegerType()),
+                StructField("name", StringType()),
+            ]
+        )
         source = spark.createDataFrame([(1, "alice")], schema)
         target = spark.createDataFrame([(1, "alice")], schema)
         good = spark.createDataFrame([(1, "alice")], schema)
@@ -177,10 +220,15 @@ class TestApplyChecksAndSaveOutputTables:
         mock_engine.apply_checks_and_split.return_value = (good, bad)
 
         extension.apply_checks_and_save_output_tables(
-            source, target, checks=[], key_columns=["id"],
+            source,
+            target,
+            checks=[],
+            key_columns=["id"],
             ref_dfs={"reference": ref},
         )
 
         mock_engine.apply_checks_and_split.assert_called_once_with(
-            source, [], ref_dfs={"reference": ref},
+            source,
+            [],
+            ref_dfs={"reference": ref},
         )

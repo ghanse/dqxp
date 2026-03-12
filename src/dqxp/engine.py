@@ -114,15 +114,9 @@ class DQEngineExtension:
                 f"{bad_count} bad records would be written to '{quarantine_table}'."
             )
 
-        mismatch_df = self._mismatch_writer.write(
-            spark, source_df, target_df, key_columns, self._mismatch_table
-        )
-        meta_df = self._meta_writer.write(
-            spark, source_df, target_df, key_columns, self._meta_table
-        )
-        dups_df = self._dups_writer.write(
-            spark, source_df, target_df, key_columns, self._dups_table
-        )
+        mismatch_df = self._mismatch_writer.write(spark, source_df, target_df, key_columns, self._mismatch_table)
+        meta_df = self._meta_writer.write(spark, source_df, target_df, key_columns, self._meta_table)
+        dups_df = self._dups_writer.write(spark, source_df, target_df, key_columns, self._dups_table)
         count_df = self._count_writer.write(
             spark, source_df, target_df, key_columns, self._count_table, threshold=threshold
         )

@@ -6,8 +6,7 @@ from pyspark.sql import SparkSession
 def spark():
     """Create a local SparkSession for testing."""
     session = (
-        SparkSession.builder
-        .master("local[2]")
+        SparkSession.builder.master("local[2]")
         .appName("dqxp-tests")
         .config("spark.sql.shuffle.partitions", "2")
         .config("spark.ui.enabled", "false")

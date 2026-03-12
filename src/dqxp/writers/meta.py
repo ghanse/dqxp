@@ -3,7 +3,6 @@ from __future__ import annotations
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import IntegerType, StringType, StructField, StructType, TimestampType
 
-
 META_SCHEMA = StructType(
     [
         StructField("table_name", StringType(), nullable=False),

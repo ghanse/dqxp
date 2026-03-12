@@ -3,7 +3,6 @@ from __future__ import annotations
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType, TimestampType
 
-
 COUNT_SCHEMA = StructType(
     [
         StructField("table_name", StringType(), nullable=False),
