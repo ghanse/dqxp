@@ -118,15 +118,17 @@ class TestWriterStubs:
         assert result.count() == 0
         assert result.schema == DUPS_SCHEMA
 
-    def test_count_writer_returns_empty_df(self, spark):
+    def test_count_writer_returns_one_row(self, spark):
         from dqxp.writers.count import CountWriter
 
         writer = CountWriter()
         source = spark.createDataFrame([], StructType([]))
         target = spark.createDataFrame([], StructType([]))
         result = writer.write(spark, source, target, ["id"], "test_table", threshold=0.1)
-        assert result.count() == 0
+        assert result.count() == 1
         assert result.schema == COUNT_SCHEMA
+        row = result.collect()[0]
+        assert row["result"] == "PASS"
 
 
 class TestApplyChecksAndSaveOutputTables:
@@ -157,9 +159,10 @@ class TestApplyChecksAndSaveOutputTables:
         assert result["mismatch"].count() > 0
         # meta is now implemented (returns 1 row per column)
         assert result["meta"].count() > 0
-        # other writers are still stubs
-        for key in ("dups", "count"):
-            assert result[key].count() == 0
+        # dups writer returns no duplicates for unique keys
+        assert result["dups"].count() == 0
+        # count writer now produces exactly 1 row
+        assert result["count"].count() == 1
 
     def test_rejects_empty_key_columns(self, spark, extension, mock_engine):
         schema = StructType([StructField("id", IntegerType())])

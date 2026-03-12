@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType, TimestampType
 
@@ -17,10 +19,10 @@ COUNT_SCHEMA = StructType(
 
 
 class CountWriter:
-    """Stub writer for the DQCount analysis table.
+    """Writer for the DQCount analysis table.
 
-    Produces a DataFrame with the count comparison schema. Full row-count
-    comparison logic will be implemented in a future iteration.
+    Compares row counts between source and target DataFrames and evaluates
+    against a configurable threshold tolerance. Produces exactly one row.
     """
 
     schema = COUNT_SCHEMA
@@ -34,17 +36,56 @@ class CountWriter:
         table_name: str,
         threshold: float = 0.0,
     ) -> DataFrame:
-        """Create an empty DataFrame with the DQCount schema.
+        """Compare row counts between source and target DataFrames.
 
         Args:
             spark: Active SparkSession.
-            source_df: Source DataFrame (unused in stub).
-            target_df: Target DataFrame (unused in stub).
-            key_columns: Columns forming the unique key (unused in stub).
-            table_name: Destination table name (unused in stub).
-            threshold: Count difference threshold (unused in stub).
+            source_df: Source DataFrame to count.
+            target_df: Target DataFrame to count.
+            key_columns: Columns forming the unique key (unused for count).
+            table_name: Destination table name recorded in output.
+            threshold: Tolerance percentage (e.g. 0.05 for 5%). Defaults to 0.0.
 
         Returns:
-            An empty DataFrame with the DQCount schema.
+            A single-row DataFrame conforming to COUNT_SCHEMA with the
+            count comparison result.
         """
-        return spark.createDataFrame([], self.schema)
+        run_date = datetime.now(tz=timezone.utc)
+
+        source_count = source_df.count()
+        target_count = target_df.count()
+        difference = abs(source_count - target_count)
+
+        result = self._evaluate(source_count, target_count, difference, threshold)
+
+        row = (
+            table_name,
+            source_count,
+            target_count,
+            difference,
+            float(threshold),
+            result,
+            run_date,
+        )
+        return spark.createDataFrame([row], self.schema)
+
+    @staticmethod
+    def _evaluate(
+        source_count: int,
+        target_count: int,
+        difference: int,
+        threshold: float,
+    ) -> str:
+        """Determine PASS or FAIL based on counts and threshold.
+
+        Rules:
+            1. Both zero: PASS
+            2. One zero, other non-zero: FAIL
+            3. Otherwise: PASS if (difference / max(source, target)) <= threshold
+        """
+        if source_count == 0 and target_count == 0:
+            return "PASS"
+        if source_count == 0 or target_count == 0:
+            return "FAIL"
+        ratio = difference / max(source_count, target_count)
+        return "PASS" if ratio <= threshold else "FAIL"
