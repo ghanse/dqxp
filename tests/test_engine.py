@@ -155,8 +155,10 @@ class TestApplyChecksAndSaveOutputTables:
         assert set(result.keys()) == {"mismatch", "meta", "dups", "count"}
         # mismatch now returns real data (id=2 TARGET_MISSING, id=3 SOURCE_MISSING)
         assert result["mismatch"].count() > 0
+        # meta is now implemented (returns 1 row per column)
+        assert result["meta"].count() > 0
         # other writers are still stubs
-        for key in ("meta", "dups", "count"):
+        for key in ("dups", "count"):
             assert result[key].count() == 0
 
     def test_rejects_empty_key_columns(self, spark, extension, mock_engine):
