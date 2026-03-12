@@ -30,6 +30,17 @@ def extension(mock_engine):
     )
 
 
+@pytest.fixture()
+def id_name_schema():
+    """Reusable two-column schema used by most engine tests."""
+    return StructType(
+        [
+            StructField("id", IntegerType()),
+            StructField("name", StringType()),
+        ]
+    )
+
+
 class TestDQEngineExtensionInit:
     def test_constructor_stores_engine(self, extension, mock_engine):
         assert extension.engine is mock_engine
@@ -190,17 +201,11 @@ class TestApplyChecksAndSaveOutputTables:
             )
 
     @patch("dqxp.engine.save_dataframe_as_table")
-    def test_output_table_saves_good_records(self, mock_save, spark, extension, mock_engine):
-        schema = StructType(
-            [
-                StructField("id", IntegerType()),
-                StructField("name", StringType()),
-            ]
-        )
-        source = spark.createDataFrame([(1, "alice"), (2, "bob")], schema)
-        target = spark.createDataFrame([(1, "alice")], schema)
-        good = spark.createDataFrame([(1, "alice")], schema)
-        bad = spark.createDataFrame([(2, "bob")], schema)
+    def test_output_table_saves_good_records(self, mock_save, spark, extension, mock_engine, id_name_schema):
+        source = spark.createDataFrame([(1, "alice"), (2, "bob")], id_name_schema)
+        target = spark.createDataFrame([(1, "alice")], id_name_schema)
+        good = spark.createDataFrame([(1, "alice")], id_name_schema)
+        bad = spark.createDataFrame([(2, "bob")], id_name_schema)
 
         mock_engine.apply_checks_and_split.return_value = (good, bad)
 
@@ -218,17 +223,11 @@ class TestApplyChecksAndSaveOutputTables:
         assert set(result.keys()) == {"mismatch", "meta", "dups", "count"}
 
     @patch("dqxp.engine.save_dataframe_as_table")
-    def test_quarantine_table_saves_bad_records(self, mock_save, spark, extension, mock_engine):
-        schema = StructType(
-            [
-                StructField("id", IntegerType()),
-                StructField("name", StringType()),
-            ]
-        )
-        source = spark.createDataFrame([(1, "alice")], schema)
-        target = spark.createDataFrame([(1, "alice")], schema)
-        good = spark.createDataFrame([], schema)
-        bad = spark.createDataFrame([(1, "alice")], schema)
+    def test_quarantine_table_saves_bad_records(self, mock_save, spark, extension, mock_engine, id_name_schema):
+        source = spark.createDataFrame([(1, "alice")], id_name_schema)
+        target = spark.createDataFrame([(1, "alice")], id_name_schema)
+        good = spark.createDataFrame([], id_name_schema)
+        bad = spark.createDataFrame([(1, "alice")], id_name_schema)
 
         mock_engine.apply_checks_and_split.return_value = (good, bad)
 
@@ -246,17 +245,11 @@ class TestApplyChecksAndSaveOutputTables:
         assert set(result.keys()) == {"mismatch", "meta", "dups", "count"}
 
     @patch("dqxp.engine.save_dataframe_as_table")
-    def test_both_output_and_quarantine_tables(self, mock_save, spark, extension, mock_engine):
-        schema = StructType(
-            [
-                StructField("id", IntegerType()),
-                StructField("name", StringType()),
-            ]
-        )
-        source = spark.createDataFrame([(1, "alice"), (2, "bob")], schema)
-        target = spark.createDataFrame([(1, "alice")], schema)
-        good = spark.createDataFrame([(1, "alice")], schema)
-        bad = spark.createDataFrame([(2, "bob")], schema)
+    def test_both_output_and_quarantine_tables(self, mock_save, spark, extension, mock_engine, id_name_schema):
+        source = spark.createDataFrame([(1, "alice"), (2, "bob")], id_name_schema)
+        target = spark.createDataFrame([(1, "alice")], id_name_schema)
+        good = spark.createDataFrame([(1, "alice")], id_name_schema)
+        bad = spark.createDataFrame([(2, "bob")], id_name_schema)
 
         mock_engine.apply_checks_and_split.return_value = (good, bad)
 
@@ -275,17 +268,11 @@ class TestApplyChecksAndSaveOutputTables:
         assert "catalog.schema.quarantine" in locations
 
     @patch("dqxp.engine.save_dataframe_as_table")
-    def test_neither_output_nor_quarantine_skips_save(self, mock_save, spark, extension, mock_engine):
-        schema = StructType(
-            [
-                StructField("id", IntegerType()),
-                StructField("name", StringType()),
-            ]
-        )
-        source = spark.createDataFrame([(1, "alice")], schema)
-        target = spark.createDataFrame([(1, "alice")], schema)
-        good = spark.createDataFrame([(1, "alice")], schema)
-        bad = spark.createDataFrame([], schema)
+    def test_neither_output_nor_quarantine_skips_save(self, mock_save, spark, extension, mock_engine, id_name_schema):
+        source = spark.createDataFrame([(1, "alice")], id_name_schema)
+        target = spark.createDataFrame([(1, "alice")], id_name_schema)
+        good = spark.createDataFrame([(1, "alice")], id_name_schema)
+        bad = spark.createDataFrame([], id_name_schema)
 
         mock_engine.apply_checks_and_split.return_value = (good, bad)
 
@@ -300,17 +287,11 @@ class TestApplyChecksAndSaveOutputTables:
         assert set(result.keys()) == {"mismatch", "meta", "dups", "count"}
 
     @patch("dqxp.engine.save_dataframe_as_table")
-    def test_quarantine_skips_save_when_no_bad_records(self, mock_save, spark, extension, mock_engine):
-        schema = StructType(
-            [
-                StructField("id", IntegerType()),
-                StructField("name", StringType()),
-            ]
-        )
-        source = spark.createDataFrame([(1, "alice")], schema)
-        target = spark.createDataFrame([(1, "alice")], schema)
-        good = spark.createDataFrame([(1, "alice")], schema)
-        bad = spark.createDataFrame([], schema)
+    def test_quarantine_skips_save_when_no_bad_records(self, mock_save, spark, extension, mock_engine, id_name_schema):
+        source = spark.createDataFrame([(1, "alice")], id_name_schema)
+        target = spark.createDataFrame([(1, "alice")], id_name_schema)
+        good = spark.createDataFrame([(1, "alice")], id_name_schema)
+        bad = spark.createDataFrame([], id_name_schema)
 
         mock_engine.apply_checks_and_split.return_value = (good, bad)
 
