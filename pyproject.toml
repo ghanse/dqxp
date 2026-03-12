@@ -2,9 +2,7 @@
 name = "dqxp"
 dynamic = ["version"]
 description = "DQX extension library providing additional data quality analysis tables"
-readme = "README.md"
 requires-python = ">=3.10"
-license = {file = "LICENSE"}
 authors = [
     {name = "Greg Hansen", email = "gregory.hansen@databricks.com"},
 ]

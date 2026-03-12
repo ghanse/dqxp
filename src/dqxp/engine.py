@@ -92,19 +92,16 @@ class DQEngineExtension:
 
         spark = self._engine.spark
 
-        # Step 1: run DQX checks
         extra_kwargs: dict = {}
         if ref_dfs is not None:
             extra_kwargs["ref_dfs"] = ref_dfs
         result = self._engine.apply_checks_and_split(source_df, checks, **extra_kwargs)
-        # result is (good_df, bad_df) or (good_df, bad_df, observation)
         good_df = result[0]
         bad_df = result[1]
 
         bad_count = bad_df.count()
         logger.info("DQX checks complete: %d good, %d bad", good_df.count(), bad_count)
 
-        # Step 2: quarantine bad records
         if quarantine_table and bad_count > 0:
             # TODO: implement quarantine persistence (write bad_df to quarantine_table)
             warnings.warn(
@@ -117,7 +114,6 @@ class DQEngineExtension:
                 f"{bad_count} bad records would be written to '{quarantine_table}'."
             )
 
-        # Step 3: compute and write analysis tables
         mismatch_df = self._mismatch_writer.write(
             spark, source_df, target_df, key_columns, self._mismatch_table
         )
