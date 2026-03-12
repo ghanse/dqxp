@@ -39,9 +39,7 @@ class TestDuplicatesInSourceOnly:
     """Test detection of duplicates only in the source DataFrame."""
 
     def test_source_duplicates_detected(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(1, "alice", 30), (1, "alice", 31)], simple_schema
-        )
+        source = spark.createDataFrame([(1, "alice", 30), (1, "alice", 31)], simple_schema)
         target = spark.createDataFrame([(2, "bob", 25)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "test_table")
@@ -56,9 +54,7 @@ class TestDuplicatesInSourceOnly:
         assert row["table_name"] == "test_table"
 
     def test_source_triple_duplicate(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(1, "a", 1), (1, "b", 2), (1, "c", 3)], simple_schema
-        )
+        source = spark.createDataFrame([(1, "a", 1), (1, "b", 2), (1, "c", 3)], simple_schema)
         target = spark.createDataFrame([(2, "d", 4)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "t")
@@ -74,9 +70,7 @@ class TestDuplicatesInTargetOnly:
 
     def test_target_duplicates_detected(self, spark, writer, simple_schema):
         source = spark.createDataFrame([(1, "alice", 30)], simple_schema)
-        target = spark.createDataFrame(
-            [(2, "bob", 25), (2, "bob", 26)], simple_schema
-        )
+        target = spark.createDataFrame([(2, "bob", 25), (2, "bob", 26)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "t")
 
@@ -93,12 +87,8 @@ class TestDuplicatesInBoth:
     """Test detection of duplicates in both source and target."""
 
     def test_duplicates_in_both_datasets(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(1, "a", 10), (1, "b", 20)], simple_schema
-        )
-        target = spark.createDataFrame(
-            [(2, "c", 30), (2, "d", 40)], simple_schema
-        )
+        source = spark.createDataFrame([(1, "a", 10), (1, "b", 20)], simple_schema)
+        target = spark.createDataFrame([(2, "c", 30), (2, "d", 40)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "t")
 
@@ -113,12 +103,8 @@ class TestDuplicatesInBoth:
         assert datasets["TARGET"]["duplicate_count"] == 2
 
     def test_same_key_duplicated_in_both(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(1, "a", 10), (1, "b", 20)], simple_schema
-        )
-        target = spark.createDataFrame(
-            [(1, "c", 30), (1, "d", 40)], simple_schema
-        )
+        source = spark.createDataFrame([(1, "a", 10), (1, "b", 20)], simple_schema)
+        target = spark.createDataFrame([(1, "c", 30), (1, "d", 40)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "t")
 
@@ -155,9 +141,7 @@ class TestCompositeKeys:
     """Test composite key handling with pipe-separated values."""
 
     def test_composite_key_joined_with_pipe(self, spark, writer, composite_schema):
-        source = spark.createDataFrame(
-            [("US", 1, 100), ("US", 1, 200)], composite_schema
-        )
+        source = spark.createDataFrame([("US", 1, 100), ("US", 1, 200)], composite_schema)
         target = spark.createDataFrame([("US", 2, 300)], composite_schema)
 
         result = writer.write(spark, source, target, ["region", "store_id"], "t")
@@ -169,12 +153,8 @@ class TestCompositeKeys:
         assert rows[0]["duplicate_count"] == 2
 
     def test_composite_key_different_combinations(self, spark, writer, composite_schema):
-        source = spark.createDataFrame(
-            [("US", 1, 100), ("US", 1, 200), ("EU", 1, 300)], composite_schema
-        )
-        target = spark.createDataFrame(
-            [("EU", 1, 400), ("EU", 1, 500)], composite_schema
-        )
+        source = spark.createDataFrame([("US", 1, 100), ("US", 1, 200), ("EU", 1, 300)], composite_schema)
+        target = spark.createDataFrame([("EU", 1, 400), ("EU", 1, 500)], composite_schema)
 
         result = writer.write(spark, source, target, ["region", "store_id"], "t")
 
@@ -229,9 +209,7 @@ class TestSchemaConformance:
     """Verify the output DataFrame conforms to DUPS_SCHEMA."""
 
     def test_output_schema_field_names_and_types(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(1, "a", 10), (1, "b", 20)], simple_schema
-        )
+        source = spark.createDataFrame([(1, "a", 10), (1, "b", 20)], simple_schema)
         target = spark.createDataFrame([(2, "c", 30)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "t")
@@ -252,9 +230,7 @@ class TestSchemaConformance:
         assert actual_fields == expected_fields
 
     def test_run_date_populated(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(1, "a", 10), (1, "b", 20)], simple_schema
-        )
+        source = spark.createDataFrame([(1, "a", 10), (1, "b", 20)], simple_schema)
         target = spark.createDataFrame([(2, "c", 30)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "t")
@@ -264,12 +240,8 @@ class TestSchemaConformance:
             assert r["run_date"] is not None
 
     def test_all_rows_have_result_fail(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(1, "a", 10), (1, "b", 20)], simple_schema
-        )
-        target = spark.createDataFrame(
-            [(2, "c", 30), (2, "d", 40)], simple_schema
-        )
+        source = spark.createDataFrame([(1, "a", 10), (1, "b", 20)], simple_schema)
+        target = spark.createDataFrame([(2, "c", 30), (2, "d", 40)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "t")
 

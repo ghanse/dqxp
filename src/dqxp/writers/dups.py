@@ -86,11 +86,7 @@ class DupsWriter:
 
         key_expr = F.concat_ws("|", *[F.col(c).cast("string") for c in key_columns])
 
-        grouped = (
-            df.groupBy(key_columns)
-            .agg(F.count("*").alias("cnt"))
-            .filter(F.col("cnt") > 1)
-        )
+        grouped = df.groupBy(key_columns).agg(F.count("*").alias("cnt")).filter(F.col("cnt") > 1)
 
         return grouped.select(
             key_expr.alias("unique_key"),
