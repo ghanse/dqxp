@@ -80,12 +80,10 @@ class DupsWriter:
         Returns:
             DataFrame with duplicate rows conforming to DUPS_SCHEMA.
         """
-        # If the DataFrame has no columns or the key columns are not present, return empty.
         df_columns = set(df.columns)
         if not all(c in df_columns for c in key_columns):
             return df.sparkSession.createDataFrame([], DUPS_SCHEMA)
 
-        # Build composite key expression: concat_ws("|", key1, key2, ...)
         key_expr = F.concat_ws("|", *[F.col(c).cast("string") for c in key_columns])
 
         grouped = (
