@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pyspark.sql.types import IntegerType, StringType, StructField, StructType
@@ -189,7 +189,36 @@ class TestApplyChecksAndSaveOutputTables:
                 threshold=-1.0,
             )
 
-    def test_quarantine_raises_not_implemented(self, spark, extension, mock_engine):
+    @patch("dqxp.engine.save_dataframe_as_table")
+    def test_output_table_saves_good_records(self, mock_save, spark, extension, mock_engine):
+        schema = StructType(
+            [
+                StructField("id", IntegerType()),
+                StructField("name", StringType()),
+            ]
+        )
+        source = spark.createDataFrame([(1, "alice"), (2, "bob")], schema)
+        target = spark.createDataFrame([(1, "alice")], schema)
+        good = spark.createDataFrame([(1, "alice")], schema)
+        bad = spark.createDataFrame([(2, "bob")], schema)
+
+        mock_engine.apply_checks_and_split.return_value = (good, bad)
+
+        result = extension.apply_checks_and_save_output_tables(
+            source,
+            target,
+            checks=[],
+            key_columns=["id"],
+            output_table="catalog.schema.output",
+        )
+
+        assert mock_save.call_count == 1
+        call_args = mock_save.call_args
+        assert call_args[0][1].location == "catalog.schema.output"
+        assert set(result.keys()) == {"mismatch", "meta", "dups", "count"}
+
+    @patch("dqxp.engine.save_dataframe_as_table")
+    def test_quarantine_table_saves_bad_records(self, mock_save, spark, extension, mock_engine):
         schema = StructType(
             [
                 StructField("id", IntegerType()),
@@ -203,14 +232,97 @@ class TestApplyChecksAndSaveOutputTables:
 
         mock_engine.apply_checks_and_split.return_value = (good, bad)
 
-        with pytest.raises(NotImplementedError, match="not yet implemented"):
-            extension.apply_checks_and_save_output_tables(
-                source,
-                target,
-                checks=[],
-                key_columns=["id"],
-                quarantine_table="catalog.schema.quarantine",
-            )
+        result = extension.apply_checks_and_save_output_tables(
+            source,
+            target,
+            checks=[],
+            key_columns=["id"],
+            quarantine_table="catalog.schema.quarantine",
+        )
+
+        assert mock_save.call_count == 1
+        call_args = mock_save.call_args
+        assert call_args[0][1].location == "catalog.schema.quarantine"
+        assert set(result.keys()) == {"mismatch", "meta", "dups", "count"}
+
+    @patch("dqxp.engine.save_dataframe_as_table")
+    def test_both_output_and_quarantine_tables(self, mock_save, spark, extension, mock_engine):
+        schema = StructType(
+            [
+                StructField("id", IntegerType()),
+                StructField("name", StringType()),
+            ]
+        )
+        source = spark.createDataFrame([(1, "alice"), (2, "bob")], schema)
+        target = spark.createDataFrame([(1, "alice")], schema)
+        good = spark.createDataFrame([(1, "alice")], schema)
+        bad = spark.createDataFrame([(2, "bob")], schema)
+
+        mock_engine.apply_checks_and_split.return_value = (good, bad)
+
+        extension.apply_checks_and_save_output_tables(
+            source,
+            target,
+            checks=[],
+            key_columns=["id"],
+            output_table="catalog.schema.output",
+            quarantine_table="catalog.schema.quarantine",
+        )
+
+        assert mock_save.call_count == 2
+        locations = [call[0][1].location for call in mock_save.call_args_list]
+        assert "catalog.schema.output" in locations
+        assert "catalog.schema.quarantine" in locations
+
+    @patch("dqxp.engine.save_dataframe_as_table")
+    def test_neither_output_nor_quarantine_skips_save(self, mock_save, spark, extension, mock_engine):
+        schema = StructType(
+            [
+                StructField("id", IntegerType()),
+                StructField("name", StringType()),
+            ]
+        )
+        source = spark.createDataFrame([(1, "alice")], schema)
+        target = spark.createDataFrame([(1, "alice")], schema)
+        good = spark.createDataFrame([(1, "alice")], schema)
+        bad = spark.createDataFrame([], schema)
+
+        mock_engine.apply_checks_and_split.return_value = (good, bad)
+
+        result = extension.apply_checks_and_save_output_tables(
+            source,
+            target,
+            checks=[],
+            key_columns=["id"],
+        )
+
+        mock_save.assert_not_called()
+        assert set(result.keys()) == {"mismatch", "meta", "dups", "count"}
+
+    @patch("dqxp.engine.save_dataframe_as_table")
+    def test_quarantine_skips_save_when_no_bad_records(self, mock_save, spark, extension, mock_engine):
+        schema = StructType(
+            [
+                StructField("id", IntegerType()),
+                StructField("name", StringType()),
+            ]
+        )
+        source = spark.createDataFrame([(1, "alice")], schema)
+        target = spark.createDataFrame([(1, "alice")], schema)
+        good = spark.createDataFrame([(1, "alice")], schema)
+        bad = spark.createDataFrame([], schema)
+
+        mock_engine.apply_checks_and_split.return_value = (good, bad)
+
+        extension.apply_checks_and_save_output_tables(
+            source,
+            target,
+            checks=[],
+            key_columns=["id"],
+            quarantine_table="catalog.schema.quarantine",
+        )
+
+        mock_save.assert_not_called()
 
     def test_passes_ref_dfs_to_engine(self, spark, extension, mock_engine):
         schema = StructType(

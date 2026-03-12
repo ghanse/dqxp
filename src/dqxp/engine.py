@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
-import warnings
 
+from databricks.labs.dqx.config import OutputConfig
 from databricks.labs.dqx.engine import DQEngineCore
 from databricks.labs.dqx.rule import DQRule
+from databricks.labs.dqx.utils import save_dataframe_as_table
 from pyspark.sql import DataFrame
 
 from dqxp.writers.count import CountWriter
@@ -58,6 +59,7 @@ class DQEngineExtension:
         target_df: DataFrame,
         checks: list[DQRule],
         key_columns: list[str],
+        output_table: str | None = None,
         quarantine_table: str | None = None,
         ref_dfs: dict[str, DataFrame] | None = None,
         threshold: float = 0.0,
@@ -66,15 +68,17 @@ class DQEngineExtension:
 
         Steps:
             1. Run DQX checks via ``engine.apply_checks_and_split`` on *source_df*.
-            2. Optionally persist quarantined (bad) records.
-            3. Compute and write mismatch, meta, dups, and count analysis tables.
+            2. Optionally persist good records to *output_table*.
+            3. Optionally persist quarantined (bad) records to *quarantine_table*.
+            4. Compute and write mismatch, meta, dups, and count analysis tables.
 
         Args:
             source_df: The source DataFrame to validate.
             target_df: The target DataFrame to compare against.
             checks: List of DQRule checks to apply via DQX.
             key_columns: Column names that together form the unique key for records.
-            quarantine_table: Optional table name for quarantined records.
+            output_table: Optional table name where good (passing) records are saved.
+            quarantine_table: Optional table name where bad (failing) records are saved.
             ref_dfs: Optional dict of reference DataFrames passed through to DQX.
             threshold: Acceptable count difference threshold (0.0 = exact match).
 
@@ -100,19 +104,16 @@ class DQEngineExtension:
         bad_df = result[1]
 
         bad_count = bad_df.count()
-        logger.info("DQX checks complete: %d good, %d bad", good_df.count(), bad_count)
+        good_count = good_df.count()
+        logger.info("DQX checks complete: %d good, %d bad", good_count, bad_count)
+
+        if output_table:
+            logger.info("Saving %d good records to %s", good_count, output_table)
+            save_dataframe_as_table(good_df, OutputConfig(location=output_table))
 
         if quarantine_table and bad_count > 0:
-            # TODO: implement quarantine persistence (write bad_df to quarantine_table)
-            warnings.warn(
-                f"Quarantine table '{quarantine_table}' specified but quarantine persistence "
-                f"is not yet implemented. {bad_count} bad records will not be saved.",
-                stacklevel=2,
-            )
-            raise NotImplementedError(
-                f"Quarantine persistence is not yet implemented. "
-                f"{bad_count} bad records would be written to '{quarantine_table}'."
-            )
+            logger.info("Saving %d bad records to %s", bad_count, quarantine_table)
+            save_dataframe_as_table(bad_df, OutputConfig(location=quarantine_table))
 
         mismatch_df = self._mismatch_writer.write(spark, source_df, target_df, key_columns, self._mismatch_table)
         meta_df = self._meta_writer.write(spark, source_df, target_df, key_columns, self._meta_table)
