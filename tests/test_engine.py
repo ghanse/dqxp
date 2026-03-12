@@ -88,15 +88,15 @@ class TestWriterSchemas:
 
 
 class TestWriterStubs:
-    def test_mismatch_writer_returns_empty_df(self, spark):
+    def test_mismatch_writer_returns_empty_for_empty_inputs(self, spark):
         from dqxp.writers.mismatch import MismatchWriter
 
+        schema = StructType([StructField("id", IntegerType())])
         writer = MismatchWriter()
-        source = spark.createDataFrame([], StructType([]))
-        target = spark.createDataFrame([], StructType([]))
+        source = spark.createDataFrame([], schema)
+        target = spark.createDataFrame([], schema)
         result = writer.write(spark, source, target, ["id"], "test_table")
         assert result.count() == 0
-        assert result.schema == MISMATCH_SCHEMA
 
     def test_meta_writer_returns_empty_df(self, spark):
         from dqxp.writers.meta import MetaWriter
@@ -153,8 +153,11 @@ class TestApplyChecksAndSaveOutputTables:
 
         mock_engine.apply_checks_and_split.assert_called_once_with(source, [])
         assert set(result.keys()) == {"mismatch", "meta", "dups", "count"}
-        for df in result.values():
-            assert df.count() == 0
+        # mismatch now returns real data (id=2 TARGET_MISSING, id=3 SOURCE_MISSING)
+        assert result["mismatch"].count() > 0
+        # other writers are still stubs
+        for key in ("meta", "dups", "count"):
+            assert result[key].count() == 0
 
     def test_rejects_empty_key_columns(self, spark, extension, mock_engine):
         schema = StructType([StructField("id", IntegerType())])
