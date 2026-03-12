@@ -87,7 +87,7 @@ class TestWriterSchemas:
         ]
 
 
-class TestWriterStubs:
+class TestWriterEmptyInputs:
     def test_mismatch_writer_returns_empty_for_empty_inputs(self, spark):
         from dqxp.writers.mismatch import MismatchWriter
 

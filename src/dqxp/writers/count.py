@@ -42,9 +42,10 @@ class CountWriter:
             spark: Active SparkSession.
             source_df: Source DataFrame to count.
             target_df: Target DataFrame to count.
-            key_columns: Columns forming the unique key (unused for count).
+            key_columns: Columns forming the unique key (accepted for
+                interface consistency with other writers, but unused).
             table_name: Destination table name recorded in output.
-            threshold: Tolerance percentage (e.g. 0.05 for 5%). Defaults to 0.0.
+            threshold: Tolerance as a fraction (e.g. 0.05 for 5%). Defaults to 0.0.
 
         Returns:
             A single-row DataFrame conforming to COUNT_SCHEMA with the
@@ -78,7 +79,14 @@ class CountWriter:
     ) -> str:
         """Determine PASS or FAIL based on counts and threshold.
 
-        Rules:
+        Args:
+            source_count: Number of rows in the source DataFrame.
+            target_count: Number of rows in the target DataFrame.
+            difference: Absolute difference between the two counts.
+            threshold: Acceptable ratio of difference to max count.
+
+        Returns:
+            ``"PASS"`` or ``"FAIL"`` based on the evaluation rules:
             1. Both zero: PASS
             2. One zero, other non-zero: FAIL
             3. Otherwise: PASS if (difference / max(source, target)) <= threshold
