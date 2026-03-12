@@ -1,4 +1,5 @@
 """Tests for the DQMismatch writer."""
+
 from __future__ import annotations
 
 import pytest

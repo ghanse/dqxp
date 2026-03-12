@@ -36,9 +36,7 @@ class MismatchWriter:
         # Build the key expression using prefixed column names
         prefixed_keys = [f"{prefix}_{c}" for c in key_columns]
         # Prefix all columns to avoid ambiguity after the join
-        renamed = df.select(
-            [F.col(c).alias(f"{prefix}_{c}") for c in df.columns]
-        )
+        renamed = df.select([F.col(c).alias(f"{prefix}_{c}") for c in df.columns])
         if len(prefixed_keys) == 1:
             key_expr = F.col(prefixed_keys[0]).cast("string")
         else:
@@ -109,9 +107,7 @@ class MismatchWriter:
         for col_name in non_key_columns:
             src_val = F.col(f"src_{col_name}").cast("string")
             tgt_val = F.col(f"tgt_{col_name}").cast("string")
-            mismatched_rows = matched.filter(
-                ~src_val.eqNullSafe(tgt_val)
-            ).select(
+            mismatched_rows = matched.filter(~src_val.eqNullSafe(tgt_val)).select(
                 F.col("unique_key"),
                 F.lit(col_name).alias("column_name"),
                 src_val.alias("source_value"),
