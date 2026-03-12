@@ -24,63 +24,16 @@ def extension(mock_engine):
     """Create a DQEngineExtension with default test parameters."""
     return DQEngineExtension(
         engine=mock_engine,
-        mismatch_table="catalog.schema.mismatch",
-        meta_table="catalog.schema.meta",
-        dups_table="catalog.schema.dups",
-        count_table="catalog.schema.count",
-        key_columns=["id"],
-        threshold=0.05,
+        mismatch_table_name="catalog.schema.mismatch",
+        schema_validation_table_name="catalog.schema.meta",
+        duplicate_count_table_name="catalog.schema.dups",
+        row_count_table_name="catalog.schema.count",
     )
 
 
 class TestDQEngineExtensionInit:
     def test_constructor_stores_engine(self, extension, mock_engine):
         assert extension.engine is mock_engine
-
-    def test_constructor_stores_key_columns(self, extension):
-        assert extension.key_columns == ["id"]
-
-    def test_key_columns_returns_copy(self, extension):
-        cols = extension.key_columns
-        cols.append("extra")
-        assert extension.key_columns == ["id"]
-
-    def test_constructor_stores_threshold(self, extension):
-        assert extension.threshold == pytest.approx(0.05)
-
-    def test_constructor_default_threshold(self, mock_engine):
-        ext = DQEngineExtension(
-            engine=mock_engine,
-            mismatch_table="t1",
-            meta_table="t2",
-            dups_table="t3",
-            count_table="t4",
-            key_columns=["id"],
-        )
-        assert ext.threshold == pytest.approx(0.0)
-
-    def test_constructor_rejects_empty_key_columns(self, mock_engine):
-        with pytest.raises(ValueError, match="key_columns must not be empty"):
-            DQEngineExtension(
-                engine=mock_engine,
-                mismatch_table="t1",
-                meta_table="t2",
-                dups_table="t3",
-                count_table="t4",
-                key_columns=[],
-            )
-
-    def test_constructor_rejects_negative_threshold(self, mock_engine):
-        with pytest.raises(ValueError, match="threshold must be non-negative"):
-            DQEngineExtension(
-                engine=mock_engine,
-                mismatch_table="t1",
-                meta_table="t2",
-                dups_table="t3",
-                count_table="t4",
-                key_columns=["id"],
-                threshold=-1.0,
-            )
 
 
 class TestWriterSchemas:
@@ -153,7 +106,7 @@ class TestWriterStubs:
         assert result.schema == COUNT_SCHEMA
 
 
-class TestApplyChecksAndSave:
+class TestApplyChecksAndSaveOutputTables:
     def test_calls_engine_and_returns_all_tables(self, spark, extension, mock_engine):
         schema = StructType([
             StructField("id", IntegerType()),
@@ -166,9 +119,69 @@ class TestApplyChecksAndSave:
 
         mock_engine.apply_checks_and_split.return_value = (good, bad)
 
-        result = extension.apply_checks_and_save(source, target, checks=[])
+        result = extension.apply_checks_and_save_output_tables(
+            source, target, checks=[], key_columns=["id"],
+        )
 
         mock_engine.apply_checks_and_split.assert_called_once_with(source, [])
         assert set(result.keys()) == {"mismatch", "meta", "dups", "count"}
         for df in result.values():
             assert df.count() == 0
+
+    def test_rejects_empty_key_columns(self, spark, extension, mock_engine):
+        schema = StructType([StructField("id", IntegerType())])
+        source = spark.createDataFrame([], schema)
+        target = spark.createDataFrame([], schema)
+        with pytest.raises(ValueError, match="key_columns must not be empty"):
+            extension.apply_checks_and_save_output_tables(
+                source, target, checks=[], key_columns=[],
+            )
+
+    def test_rejects_negative_threshold(self, spark, extension, mock_engine):
+        schema = StructType([StructField("id", IntegerType())])
+        source = spark.createDataFrame([], schema)
+        target = spark.createDataFrame([], schema)
+        with pytest.raises(ValueError, match="threshold must be non-negative"):
+            extension.apply_checks_and_save_output_tables(
+                source, target, checks=[], key_columns=["id"], threshold=-1.0,
+            )
+
+    def test_quarantine_raises_not_implemented(self, spark, extension, mock_engine):
+        schema = StructType([
+            StructField("id", IntegerType()),
+            StructField("name", StringType()),
+        ])
+        source = spark.createDataFrame([(1, "alice")], schema)
+        target = spark.createDataFrame([(1, "alice")], schema)
+        good = spark.createDataFrame([], schema)
+        bad = spark.createDataFrame([(1, "alice")], schema)
+
+        mock_engine.apply_checks_and_split.return_value = (good, bad)
+
+        with pytest.raises(NotImplementedError, match="not yet implemented"):
+            extension.apply_checks_and_save_output_tables(
+                source, target, checks=[], key_columns=["id"],
+                quarantine_table="catalog.schema.quarantine",
+            )
+
+    def test_passes_ref_dfs_to_engine(self, spark, extension, mock_engine):
+        schema = StructType([
+            StructField("id", IntegerType()),
+            StructField("name", StringType()),
+        ])
+        source = spark.createDataFrame([(1, "alice")], schema)
+        target = spark.createDataFrame([(1, "alice")], schema)
+        good = spark.createDataFrame([(1, "alice")], schema)
+        bad = spark.createDataFrame([], schema)
+        ref = spark.createDataFrame([(1, "ref")], schema)
+
+        mock_engine.apply_checks_and_split.return_value = (good, bad)
+
+        extension.apply_checks_and_save_output_tables(
+            source, target, checks=[], key_columns=["id"],
+            ref_dfs={"reference": ref},
+        )
+
+        mock_engine.apply_checks_and_split.assert_called_once_with(
+            source, [], ref_dfs={"reference": ref},
+        )
