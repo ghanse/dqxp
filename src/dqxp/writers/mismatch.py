@@ -10,7 +10,7 @@ from pyspark.sql.types import StringType, StructField, StructType, TimestampType
 MISMATCH_SCHEMA = StructType(
     [
         StructField("unique_key", StringType(), nullable=False),
-        StructField("column_name", StringType(), nullable=False),
+        StructField("column_name", StringType(), nullable=True),
         StructField("source_value", StringType(), nullable=True),
         StructField("target_value", StringType(), nullable=True),
         StructField("mismatch_type", StringType(), nullable=False),
@@ -64,6 +64,15 @@ class MismatchWriter:
         - For rows only in target: records ``SOURCE_MISSING``.
 
         All values are cast to strings. Composite keys are joined with ``|``.
+
+        Notes:
+            Non-key columns are derived from *source_df* only. Columns present
+            in the target but absent from the source are silently ignored.
+
+            If a key column contains NULL, the cast to string renders it as the
+            literal ``"null"``, which may collide with an actual string value of
+            ``"null"`` in another row. This is unlikely for typical primary-key
+            columns but callers should be aware of the limitation.
 
         Args:
             spark: Active SparkSession.

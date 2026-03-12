@@ -248,3 +248,6 @@ class TestSchemaConformance:
         result = writer.write(spark, source, target, ["id"], "t")
 
         assert result.count() == 0
+        expected_fields = [(f.name, f.dataType) for f in MISMATCH_SCHEMA.fields]
+        actual_fields = [(f.name, f.dataType) for f in result.schema.fields]
+        assert actual_fields == expected_fields
