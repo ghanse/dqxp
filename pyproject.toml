@@ -1,0 +1,46 @@
+[project]
+name = "dqxp"
+dynamic = ["version"]
+description = "DQX extension library providing additional data quality analysis tables"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Greg Hansen", email = "gregory.hansen@databricks.com"},
+]
+dependencies = [
+    "databricks-labs-dqx>=0.13.0",
+    "pyspark>=3.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "ruff>=0.3",
+    "black>=24.0",
+]
+
+[build-system]
+requires = ["hatchling>=1.9.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+sources = ["src"]
+include = ["src"]
+
+[tool.hatch.version]
+path = "src/dqxp/__about__.py"
+
+[tool.pytest.ini_options]
+addopts = "--no-header -v"
+pythonpath = ["src"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.black]
+target-version = ["py310"]
+line-length = 120
