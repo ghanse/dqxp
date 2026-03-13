@@ -21,6 +21,12 @@
 
 # COMMAND ----------
 
+from dqxp.__about__ import __version__, __dqx_version__
+print(__version__)
+print(__dqx_version__)
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ## 1. Configuration
 # MAGIC
@@ -92,14 +98,14 @@ target_df.show()
 
 # COMMAND ----------
 
-from databricks.labs.dqx.rule import DQRule
+from databricks.labs.dqx.rule import DQRowRule
 from databricks.labs.dqx.check_funcs import is_not_null, is_not_empty, is_in_list
 
 checks = [
-    DQRule(check_func=is_not_null, column="customer_id", name="customer_id_not_null"),
-    DQRule(check_func=is_not_null, column="name", name="name_not_null"),
-    DQRule(check_func=is_not_empty, column="name", name="name_not_empty"),
-    DQRule(
+    DQRowRule(check_func=is_not_null, column="customer_id", name="customer_id_not_null"),
+    DQRowRule(check_func=is_not_null, column="name", name="name_not_null"),
+    DQRowRule(check_func=is_not_empty, column="name", name="name_not_empty"),
+    DQRowRule(
         check_func=is_in_list,
         column="region",
         name="region_valid",
@@ -118,9 +124,10 @@ checks = [
 # COMMAND ----------
 
 from databricks.labs.dqx.engine import DQEngine
+from databricks.sdk import WorkspaceClient
 from dqxp import DQEngineExtension
 
-engine = DQEngine(spark)
+engine = DQEngine(WorkspaceClient())
 
 ext = DQEngineExtension(
     engine=engine,
