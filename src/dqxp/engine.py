@@ -3,9 +3,8 @@ from __future__ import annotations
 import logging
 
 from databricks.labs.dqx.config import OutputConfig
-from databricks.labs.dqx.engine import DQEngineCore
+from databricks.labs.dqx.engine import DQEngine
 from databricks.labs.dqx.rule import DQRule
-from databricks.labs.dqx.utils import save_dataframe_as_table
 from pyspark.sql import DataFrame
 
 from dqxp.writers.count import CountWriter
@@ -19,11 +18,11 @@ logger = logging.getLogger(__name__)
 class DQEngineExtension:
     """Extension for DQX that produces additional data quality analysis tables.
 
-    Wraps a DQEngineCore instance and, after running DQX checks, computes and
+    Wraps a DQEngine instance and, after running DQX checks, computes and
     writes four analysis tables: DQMismatch, DQMeta, DQDups, and DQCount.
 
     Args:
-        engine: A DQEngineCore instance used to run data quality checks.
+        engine: A DQEngine instance used to run data quality checks.
         mismatch_table_name: Fully-qualified name of the mismatch output table.
         schema_validation_table_name: Fully-qualified name of the meta/schema output table.
         duplicate_count_table_name: Fully-qualified name of the duplicates output table.
@@ -32,7 +31,7 @@ class DQEngineExtension:
 
     def __init__(
         self,
-        engine: DQEngineCore,
+        engine: DQEngine,
         mismatch_table_name: str,
         schema_validation_table_name: str,
         duplicate_count_table_name: str,
@@ -50,7 +49,7 @@ class DQEngineExtension:
         self._count_writer = CountWriter()
 
     @property
-    def engine(self) -> DQEngineCore:
+    def engine(self) -> DQEngine:
         return self._engine
 
     def apply_checks_and_save_output_tables(
@@ -99,21 +98,14 @@ class DQEngineExtension:
         extra_kwargs: dict = {}
         if ref_dfs is not None:
             extra_kwargs["ref_dfs"] = ref_dfs
-        result = self._engine.apply_checks_and_split(source_df, checks, **extra_kwargs)
-        good_df = result[0]
-        bad_df = result[1]
+        good_df, bad_df = self._engine.apply_checks_and_split(source_df, checks, **extra_kwargs)
 
-        bad_count = bad_df.count()
-        good_count = good_df.count()
-        logger.info("DQX checks complete: %d good, %d bad", good_count, bad_count)
-
-        if output_table:
-            logger.info("Saving %d good records to %s", good_count, output_table)
-            save_dataframe_as_table(good_df, OutputConfig(location=output_table))
-
-        if quarantine_table and bad_count > 0:
-            logger.info("Saving %d bad records to %s", bad_count, quarantine_table)
-            save_dataframe_as_table(bad_df, OutputConfig(location=quarantine_table))
+        self._engine.save_results_in_table(
+            output_df=good_df if output_table else None,
+            quarantine_df=bad_df if quarantine_table else None,
+            output_config=OutputConfig(location=output_table) if output_table else None,
+            quarantine_config=OutputConfig(location=quarantine_table) if quarantine_table else None,
+        )
 
         mismatch_df = self._mismatch_writer.write(spark, source_df, target_df, key_columns, self._mismatch_table)
         meta_df = self._meta_writer.write(spark, source_df, target_df, key_columns, self._meta_table)
