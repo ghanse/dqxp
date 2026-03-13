@@ -1,0 +1,4 @@
+# Version changelog
+
+## 0.1.0
+Initial release of the DQXPlus project
