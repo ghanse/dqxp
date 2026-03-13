@@ -58,12 +58,8 @@ class TestWithinThreshold:
     """Test scenarios where the difference is within threshold."""
 
     def test_small_difference_within_threshold(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(i, "x", i) for i in range(100)], simple_schema
-        )
-        target = spark.createDataFrame(
-            [(i, "x", i) for i in range(95)], simple_schema
-        )
+        source = spark.createDataFrame([(i, "x", i) for i in range(100)], simple_schema)
+        target = spark.createDataFrame([(i, "x", i) for i in range(95)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "t", threshold=0.05)
 
@@ -75,12 +71,8 @@ class TestWithinThreshold:
         assert rows[0]["result"] == "PASS"
 
     def test_exactly_at_threshold_passes(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(i, "x", i) for i in range(100)], simple_schema
-        )
-        target = spark.createDataFrame(
-            [(i, "x", i) for i in range(90)], simple_schema
-        )
+        source = spark.createDataFrame([(i, "x", i) for i in range(100)], simple_schema)
+        target = spark.createDataFrame([(i, "x", i) for i in range(90)], simple_schema)
 
         # difference/max = 10/100 = 0.10
         result = writer.write(spark, source, target, ["id"], "t", threshold=0.10)
@@ -89,12 +81,8 @@ class TestWithinThreshold:
         assert rows[0]["result"] == "PASS"
 
     def test_target_larger_within_threshold(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(i, "x", i) for i in range(90)], simple_schema
-        )
-        target = spark.createDataFrame(
-            [(i, "x", i) for i in range(100)], simple_schema
-        )
+        source = spark.createDataFrame([(i, "x", i) for i in range(90)], simple_schema)
+        target = spark.createDataFrame([(i, "x", i) for i in range(100)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "t", threshold=0.10)
 
@@ -109,12 +97,8 @@ class TestOverThreshold:
     """Test scenarios where the difference exceeds threshold."""
 
     def test_over_threshold_fails(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(i, "x", i) for i in range(100)], simple_schema
-        )
-        target = spark.createDataFrame(
-            [(i, "x", i) for i in range(80)], simple_schema
-        )
+        source = spark.createDataFrame([(i, "x", i) for i in range(100)], simple_schema)
+        target = spark.createDataFrame([(i, "x", i) for i in range(80)], simple_schema)
 
         # difference/max = 20/100 = 0.20 > 0.10
         result = writer.write(spark, source, target, ["id"], "t", threshold=0.10)
@@ -124,12 +108,8 @@ class TestOverThreshold:
         assert rows[0]["count_difference"] == 20
 
     def test_just_over_threshold_fails(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(i, "x", i) for i in range(100)], simple_schema
-        )
-        target = spark.createDataFrame(
-            [(i, "x", i) for i in range(89)], simple_schema
-        )
+        source = spark.createDataFrame([(i, "x", i) for i in range(100)], simple_schema)
+        target = spark.createDataFrame([(i, "x", i) for i in range(89)], simple_schema)
 
         # difference/max = 11/100 = 0.11 > 0.10
         result = writer.write(spark, source, target, ["id"], "t", threshold=0.10)
@@ -191,9 +171,7 @@ class TestThresholdValues:
 
     def test_threshold_one_always_passes_nonzero(self, spark, writer, simple_schema):
         source = spark.createDataFrame([(1, "a", 10)], simple_schema)
-        target = spark.createDataFrame(
-            [(i, "x", i) for i in range(100)], simple_schema
-        )
+        target = spark.createDataFrame([(i, "x", i) for i in range(100)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "t", threshold=1.0)
 
@@ -233,12 +211,8 @@ class TestSchemaConformance:
         assert actual_fields == expected_fields
 
     def test_produces_exactly_one_row(self, spark, writer, simple_schema):
-        source = spark.createDataFrame(
-            [(i, "x", i) for i in range(50)], simple_schema
-        )
-        target = spark.createDataFrame(
-            [(i, "x", i) for i in range(30)], simple_schema
-        )
+        source = spark.createDataFrame([(i, "x", i) for i in range(50)], simple_schema)
+        target = spark.createDataFrame([(i, "x", i) for i in range(30)], simple_schema)
 
         result = writer.write(spark, source, target, ["id"], "t", threshold=0.5)
 
