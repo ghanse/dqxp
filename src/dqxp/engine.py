@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import logging
 
 from databricks.labs.dqx.config import OutputConfig
@@ -7,6 +6,7 @@ from databricks.labs.dqx.engine import DQEngine
 from databricks.labs.dqx.rule import DQRule
 from pyspark.sql import DataFrame
 
+from dqxp.checked_result import CheckedResult
 from dqxp.writers.count import CountWriter
 from dqxp.writers.dups import DupsWriter
 from dqxp.writers.meta import MetaWriter
@@ -16,13 +16,14 @@ logger = logging.getLogger(__name__)
 
 
 class DQEngineExtension:
-    """Extension for DQX that produces additional data quality analysis tables.
+    """
+    Extension for DQX that produces additional data quality analysis tables.
 
-    Wraps a DQEngine instance and, after running DQX checks, computes and
-    writes four analysis tables: DQMismatch, DQMeta, DQDups, and DQCount.
+    Wraps a ``DQEngine`` instance and, after running DQX checks, computes and writes four analysis tables: mismatch,
+    schema validation, duplicates, and row count.
 
     Args:
-        engine: A DQEngine instance used to run data quality checks.
+        engine: A ``DQEngine`` instance used to run data quality checks.
         mismatch_table_name: Fully-qualified name of the mismatch output table.
         schema_validation_table_name: Fully-qualified name of the meta/schema output table.
         duplicate_count_table_name: Fully-qualified name of the duplicates output table.
@@ -63,21 +64,21 @@ class DQEngineExtension:
         ref_dfs: dict[str, DataFrame] | None = None,
         threshold: float = 0.0,
     ) -> dict[str, DataFrame]:
-        """Run DQX checks on source_df and produce all analysis tables.
+        """
+        Runs DQX checks on source_df and produce all analysis tables.
 
         Steps:
-            1. Run DQX checks via ``engine.apply_checks_and_split`` on *source_df*.
-            2. Optionally persist good records to *output_table*.
-            3. Optionally persist quarantined (bad) records to *quarantine_table*.
-            4. Compute and write mismatch, meta, dups, and count analysis tables.
+            1. Run DQX checks via ``engine.apply_checks_and_split`` on the source_df.
+            2. Optionally persist quarantined (bad) records.
+            3. Compute and write mismatch, schema validation, duplicates, and count analysis tables.
 
         Args:
             source_df: The source DataFrame to validate.
             target_df: The target DataFrame to compare against.
-            checks: List of DQRule checks to apply via DQX.
+            checks: List of ``DQRule`` checks to apply via DQX.
             key_columns: Column names that together form the unique key for records.
-            output_table: Optional table name where good (passing) records are saved.
-            quarantine_table: Optional table name where bad (failing) records are saved.
+            output_table: Optional table name for validated records.
+            quarantine_table: Optional table name for quarantined records.
             ref_dfs: Optional dict of reference DataFrames passed through to DQX.
             threshold: Acceptable count difference threshold (0.0 = exact match).
 
@@ -88,36 +89,134 @@ class DQEngineExtension:
         Raises:
             ValueError: If key_columns is empty or threshold is negative.
         """
+        checked_result = self.get_checked_result(
+            source_df, target_df, checks, key_columns, ref_dfs=ref_dfs, threshold=threshold
+        )
+
+        if output_table or quarantine_table:
+            self._engine.save_results_in_table(
+                output_df=checked_result.good_df if output_table else None,
+                quarantine_df=checked_result.bad_df if quarantine_table else None,
+                output_config=OutputConfig(location=output_table) if output_table else None,
+                quarantine_config=OutputConfig(location=quarantine_table) if quarantine_table else None,
+            )
+
+        return {
+            "mismatch": self.save_to_mismatch_table(checked_result=checked_result),
+            "meta": self.save_to_schema_validation_table(checked_result=checked_result),
+            "dups": self.save_to_duplicates_table(checked_result=checked_result),
+            "count": self.save_to_row_count_table(checked_result=checked_result),
+        }
+
+    def get_checked_result(
+        self,
+        source_df: DataFrame,
+        target_df: DataFrame,
+        checks: list[DQRule],
+        key_columns: list[str],
+        ref_dfs: dict[str, DataFrame] | None = None,
+        threshold: float = 0.0,
+    ) -> CheckedResult:
+        """
+        Runs DQX checks and return the results without writing any tables.
+
+        Args:
+            source_df: The source DataFrame to validate.
+            target_df: The target DataFrame to compare against.
+            checks: List of ``DQRule`` checks to apply via DQX.
+            key_columns: Column names that together form the unique key for records.
+            ref_dfs: Optional dict of reference DataFrames passed through to DQX.
+            threshold: Acceptable count difference threshold (0.0 = exact match).
+
+        Returns:
+            ``CheckedResult`` containing the good/bad split and context needed by the individual ``save_to_*`` methods.
+
+        Raises:
+            ValueError: If key_columns is empty or threshold is negative.
+        """
         if not key_columns:
             raise ValueError("key_columns must not be empty")
         if threshold < 0:
             raise ValueError("threshold must be non-negative")
 
-        spark = self._engine.spark
-
         extra_kwargs: dict = {}
         if ref_dfs is not None:
             extra_kwargs["ref_dfs"] = ref_dfs
-        good_df, bad_df = self._engine.apply_checks_and_split(source_df, checks, **extra_kwargs)
+        result = self._engine.apply_checks_and_split(source_df, checks, **extra_kwargs)
+        good_df = result[0]
+        bad_df = result[1]
 
-        if output_table or quarantine_table:
-            self._engine.save_results_in_table(
-                output_df=good_df if output_table else None,
-                quarantine_df=bad_df if quarantine_table else None,
-                output_config=OutputConfig(location=output_table) if output_table else None,
-                quarantine_config=OutputConfig(location=quarantine_table) if quarantine_table else None,
-            )
+        logger.info("DQX checks complete: %d good, %d bad", good_df.count(), bad_df.count())
 
-        mismatch_df = self._mismatch_writer.write(spark, source_df, target_df, key_columns, self._mismatch_table)
-        meta_df = self._meta_writer.write(spark, source_df, target_df, key_columns, self._meta_table)
-        dups_df = self._dups_writer.write(spark, source_df, target_df, key_columns, self._dups_table)
-        count_df = self._count_writer.write(
-            spark, source_df, target_df, key_columns, self._count_table, threshold=threshold
+        return CheckedResult(
+            good_df=good_df,
+            bad_df=bad_df,
+            source_df=source_df,
+            target_df=target_df,
+            key_columns=key_columns,
+            threshold=threshold,
         )
 
-        return {
-            "mismatch": mismatch_df,
-            "meta": meta_df,
-            "dups": dups_df,
-            "count": count_df,
-        }
+    def save_to_mismatch_table(self, checked_result: CheckedResult | None = None, **kwargs) -> DataFrame:
+        """
+        Saves mismatch analysis to the mismatch table.
+
+        Args:
+            checked_result: Pre-computed ``CheckedResult``. If ``None``, calls ``get_checked_result()`` with the
+                specified keyword arguments.
+            **kwargs: Used when calling ``get_checked_result()`` if input checked results is not provided.
+
+        Returns:
+            The mismatch DataFrame that was produced.
+        """
+        cr = checked_result or self.get_checked_result(**kwargs)
+        return self._mismatch_writer.write(
+            self._engine.spark, cr.source_df, cr.target_df, cr.key_columns, self._mismatch_table
+        )
+
+    def save_to_schema_validation_table(self, checked_result: CheckedResult | None = None, **kwargs) -> DataFrame:
+        """
+        Saves schema validation analysis to the meta table.
+
+        Args:
+            checked_result: Pre-computed ``CheckedResult``. If ``None``, calls ``get_checked_result()`` with the
+                specified keyword arguments.
+            **kwargs: Used when calling ``get_checked_result()`` if input checked results is not provided.
+
+        Returns:
+            The schema validation DataFrame that was produced.
+        """
+        cr = checked_result or self.get_checked_result(**kwargs)
+        return self._meta_writer.write(self._engine.spark, cr.source_df, cr.target_df, cr.key_columns, self._meta_table)
+
+    def save_to_duplicates_table(self, checked_result: CheckedResult | None = None, **kwargs) -> DataFrame:
+        """
+        Saves duplicate detection analysis to the duplicates table.
+
+        Args:
+            checked_result: Pre-computed ``CheckedResult``. If ``None``, calls ``get_checked_result()`` with the
+                specified keyword arguments.
+            **kwargs: Used when calling ``get_checked_result()`` if input checked results is not provided.
+
+        Returns:
+            The duplicates DataFrame that was produced.
+        """
+        cr = checked_result or self.get_checked_result(**kwargs)
+        return self._dups_writer.write(self._engine.spark, cr.source_df, cr.target_df, cr.key_columns, self._dups_table)
+
+    def save_to_row_count_table(self, checked_result: CheckedResult | None = None, **kwargs) -> DataFrame:
+        """
+        Saves row count comparison analysis to the count table.
+
+        Args:
+            checked_result: Pre-computed ``CheckedResult``. If ``None``, calls ``get_checked_result()`` with the
+                specified keyword arguments.
+            **kwargs: Used when calling ``get_checked_result()`` if input checked results is not provided.
+
+        Returns:
+            The row count comparison DataFrame that was produced.
+        """
+        cr = checked_result or self.get_checked_result(**kwargs)
+        return self._count_writer.write(
+            self._engine.spark, cr.source_df, cr.target_df, cr.key_columns, self._count_table, threshold=cr.threshold
+        )

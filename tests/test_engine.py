@@ -1,9 +1,11 @@
 from unittest.mock import MagicMock
 
 import pytest
+from pyspark.sql import DataFrame
 from pyspark.sql.types import IntegerType, StringType, StructField, StructType
 
 from dqxp.engine import DQEngineExtension
+from dqxp.checked_result import CheckedResult
 from dqxp.writers.count import COUNT_SCHEMA
 from dqxp.writers.dups import DUPS_SCHEMA
 from dqxp.writers.meta import META_SCHEMA
@@ -338,3 +340,322 @@ class TestApplyChecksAndSaveOutputTables:
             [],
             ref_dfs={"reference": ref},
         )
+
+
+@pytest.fixture()
+def simple_schema_3col():
+    return StructType(
+        [
+            StructField("id", IntegerType()),
+            StructField("name", StringType()),
+            StructField("age", IntegerType()),
+        ]
+    )
+
+
+def _setup_engine_split(mock_engine, source_df, schema):
+    """Configure mock engine to return good/bad split (all good, none bad)."""
+    spark = mock_engine.spark
+    good_df = source_df
+    bad_df = spark.createDataFrame([], schema)
+    mock_engine.apply_checks_and_split.return_value = (good_df, bad_df)
+
+
+class TestGetCheckedResults:
+    """Tests for get_checked_result method."""
+
+    def test_returns_checked_results_type(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "alice", 30)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "alice", 31)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+
+        result = extension.get_checked_result(source, target, [], ["id"])
+
+        assert isinstance(result, CheckedResult)
+        assert result.source_df is source
+        assert result.target_df is target
+        assert result.key_columns == ["id"]
+        assert result.threshold == 0.0
+
+    def test_passes_checks_to_engine(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        checks = [MagicMock()]
+
+        extension.get_checked_result(source, target, checks, ["id"])
+
+        mock_engine.apply_checks_and_split.assert_called_once_with(source, checks)
+
+    def test_passes_ref_dfs(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        ref_dfs = {"ref": target}
+
+        extension.get_checked_result(source, target, [], ["id"], ref_dfs=ref_dfs)
+
+        mock_engine.apply_checks_and_split.assert_called_once_with(source, [], ref_dfs=ref_dfs)
+
+    def test_good_and_bad_dfs(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10), (2, "b", 20)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+
+        result = extension.get_checked_result(source, target, [], ["id"])
+
+        assert result.good_df.count() == 2
+        assert result.bad_df.count() == 0
+
+    def test_custom_threshold_stored(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+
+        result = extension.get_checked_result(source, target, [], ["id"], threshold=0.05)
+
+        assert result.threshold == 0.05
+
+    def test_empty_key_columns_raises(self, spark, extension, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+
+        with pytest.raises(ValueError, match="key_columns must not be empty"):
+            extension.get_checked_result(source, target, [], [])
+
+    def test_negative_threshold_raises(self, spark, extension, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+
+        with pytest.raises(ValueError, match="threshold must be non-negative"):
+            extension.get_checked_result(source, target, [], ["id"], threshold=-1.0)
+
+
+class TestSaveToMismatchTable:
+    """Tests for save_to_mismatch_table method."""
+
+    def test_with_checked_results(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "alice", 30), (2, "bob", 25)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "alice", 31), (3, "carol", 35)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        result = extension.save_to_mismatch_table(checked_result=cr)
+
+        assert isinstance(result, DataFrame)
+        rows = result.collect()
+        assert len(rows) > 0
+        types = {r["mismatch_type"] for r in rows}
+        assert "VALUE_MISMATCH" in types
+        assert "TARGET_MISSING" in types
+        assert "SOURCE_MISSING" in types
+
+    def test_without_checked_results(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+
+        result = extension.save_to_mismatch_table(source_df=source, target_df=target, checks=[], key_columns=["id"])
+
+        assert isinstance(result, DataFrame)
+        mock_engine.apply_checks_and_split.assert_called_once()
+
+    def test_uses_configured_table_name(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "b", 20)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        result = extension.save_to_mismatch_table(checked_result=cr)
+
+        rows = result.collect()
+        for r in rows:
+            assert r["table_name"] == "catalog.schema.mismatch"
+
+
+class TestSaveToSchemaValidationTable:
+    """Tests for save_to_schema_validation_table method."""
+
+    def test_with_checked_results(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        result = extension.save_to_schema_validation_table(checked_result=cr)
+
+        assert isinstance(result, DataFrame)
+        rows = result.collect()
+        assert len(rows) == 3  # id, name, age
+
+    def test_without_checked_results(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+
+        result = extension.save_to_schema_validation_table(
+            source_df=source, target_df=target, checks=[], key_columns=["id"]
+        )
+
+        assert isinstance(result, DataFrame)
+        mock_engine.apply_checks_and_split.assert_called_once()
+
+    def test_matching_schemas_pass(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(2, "b", 20)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        result = extension.save_to_schema_validation_table(checked_result=cr)
+
+        for r in result.collect():
+            assert r["result"] == "PASS"
+
+    def test_uses_configured_table_name(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(2, "b", 20)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        result = extension.save_to_schema_validation_table(checked_result=cr)
+
+        for r in result.collect():
+            assert r["table_name"] == "catalog.schema.meta"
+
+
+class TestSaveToDuplicatesTable:
+    """Tests for save_to_duplicates_table method."""
+
+    def test_no_duplicates(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10), (2, "b", 20)], simple_schema_3col)
+        target = spark.createDataFrame([(3, "c", 30)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        result = extension.save_to_duplicates_table(checked_result=cr)
+
+        assert isinstance(result, DataFrame)
+        assert result.count() == 0
+
+    def test_with_duplicates(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10), (1, "b", 20)], simple_schema_3col)
+        target = spark.createDataFrame([(2, "c", 30)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        result = extension.save_to_duplicates_table(checked_result=cr)
+
+        rows = result.collect()
+        assert len(rows) == 1
+        assert rows[0]["dataset"] == "SOURCE"
+        assert rows[0]["duplicate_count"] == 2
+
+    def test_without_checked_results(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+
+        result = extension.save_to_duplicates_table(source_df=source, target_df=target, checks=[], key_columns=["id"])
+
+        assert isinstance(result, DataFrame)
+        mock_engine.apply_checks_and_split.assert_called_once()
+
+    def test_uses_configured_table_name(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10), (1, "b", 20)], simple_schema_3col)
+        target = spark.createDataFrame([(2, "c", 30)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        result = extension.save_to_duplicates_table(checked_result=cr)
+
+        for r in result.collect():
+            assert r["table_name"] == "catalog.schema.dups"
+
+
+class TestSaveToRowCountTable:
+    """Tests for save_to_row_count_table method."""
+
+    def test_matching_counts(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10), (2, "b", 20)], simple_schema_3col)
+        target = spark.createDataFrame([(3, "c", 30), (4, "d", 40)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        result = extension.save_to_row_count_table(checked_result=cr)
+
+        rows = result.collect()
+        assert len(rows) == 1
+        assert rows[0]["source_count"] == 2
+        assert rows[0]["target_count"] == 2
+        assert rows[0]["result"] == "PASS"
+
+    def test_count_difference_fails(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10), (2, "b", 20)], simple_schema_3col)
+        target = spark.createDataFrame([(3, "c", 30)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        result = extension.save_to_row_count_table(checked_result=cr)
+
+        rows = result.collect()
+        assert rows[0]["source_count"] == 2
+        assert rows[0]["target_count"] == 1
+        assert rows[0]["count_difference"] == 1
+        assert rows[0]["result"] == "FAIL"
+
+    def test_threshold_passes_through(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10), (2, "b", 20)], simple_schema_3col)
+        target = spark.createDataFrame([(3, "c", 30)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"], threshold=0.5)
+
+        result = extension.save_to_row_count_table(checked_result=cr)
+
+        rows = result.collect()
+        assert rows[0]["threshold"] == 0.5
+        assert rows[0]["result"] == "PASS"
+
+    def test_without_checked_results(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+
+        result = extension.save_to_row_count_table(source_df=source, target_df=target, checks=[], key_columns=["id"])
+
+        assert isinstance(result, DataFrame)
+        mock_engine.apply_checks_and_split.assert_called_once()
+
+    def test_uses_configured_table_name(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        target = spark.createDataFrame([(2, "b", 20)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        result = extension.save_to_row_count_table(checked_result=cr)
+
+        for r in result.collect():
+            assert r["table_name"] == "catalog.schema.count"
+
+
+class TestCheckedResultsReuse:
+    """Test that checked_results can be computed once and reused."""
+
+    def test_reuse_across_all_save_methods(self, spark, extension, mock_engine, simple_schema_3col):
+        source = spark.createDataFrame([(1, "a", 10), (2, "b", 20)], simple_schema_3col)
+        target = spark.createDataFrame([(1, "a", 10)], simple_schema_3col)
+        _setup_engine_split(mock_engine, source, simple_schema_3col)
+
+        cr = extension.get_checked_result(source, target, [], ["id"])
+
+        mismatch = extension.save_to_mismatch_table(checked_result=cr)
+        meta = extension.save_to_schema_validation_table(checked_result=cr)
+        dups = extension.save_to_duplicates_table(checked_result=cr)
+        count = extension.save_to_row_count_table(checked_result=cr)
+
+        # Engine should only have been called once
+        assert mock_engine.apply_checks_and_split.call_count == 1
+
+        assert isinstance(mismatch, DataFrame)
+        assert isinstance(meta, DataFrame)
+        assert isinstance(dups, DataFrame)
+        assert isinstance(count, DataFrame)
