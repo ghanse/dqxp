@@ -27,6 +27,10 @@ build-backend = "hatchling.build"
 sources = ["src"]
 include = ["src"]
 
+[tool.hatch.envs.default]
+type = "virtual"
+path = ".venv"
+
 [tool.hatch.version]
 path = "src/dqxp/__about__.py"
 
