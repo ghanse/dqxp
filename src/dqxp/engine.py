@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 class CheckedResults:
     """Container for DQX check results and the context needed by writers.
 
+    The ``good_df`` and ``bad_df`` fields are available for consumer code
+    (e.g., quarantine workflows) even though the built-in ``save_to_*``
+    methods only use ``source_df``, ``target_df``, and ``key_columns``.
+
     Attributes:
         good_df: DataFrame of records that passed all DQX checks.
         bad_df: DataFrame of records that failed at least one DQX check.
@@ -123,7 +127,7 @@ class DQEngineExtension:
             threshold=threshold,
         )
 
-    def save_to_mismatch_table(self, checked_results: CheckedResults | None = None, **kwargs) -> DataFrame:
+    def save_to_mismatch_table(self, *, checked_results: CheckedResults | None = None, **kwargs) -> DataFrame:
         """Save mismatch analysis to the mismatch table.
 
         Args:
@@ -142,7 +146,7 @@ class DQEngineExtension:
             self._engine.spark, cr.source_df, cr.target_df, cr.key_columns, self._mismatch_table
         )
 
-    def save_to_schema_validation_table(self, checked_results: CheckedResults | None = None, **kwargs) -> DataFrame:
+    def save_to_schema_validation_table(self, *, checked_results: CheckedResults | None = None, **kwargs) -> DataFrame:
         """Save schema validation analysis to the meta table.
 
         Args:
@@ -158,7 +162,7 @@ class DQEngineExtension:
         cr = checked_results or self.get_checked_results(**kwargs)
         return self._meta_writer.write(self._engine.spark, cr.source_df, cr.target_df, cr.key_columns, self._meta_table)
 
-    def save_to_duplicates_table(self, checked_results: CheckedResults | None = None, **kwargs) -> DataFrame:
+    def save_to_duplicates_table(self, *, checked_results: CheckedResults | None = None, **kwargs) -> DataFrame:
         """Save duplicate detection analysis to the duplicates table.
 
         Args:
@@ -174,7 +178,7 @@ class DQEngineExtension:
         cr = checked_results or self.get_checked_results(**kwargs)
         return self._dups_writer.write(self._engine.spark, cr.source_df, cr.target_df, cr.key_columns, self._dups_table)
 
-    def save_to_row_count_table(self, checked_results: CheckedResults | None = None, **kwargs) -> DataFrame:
+    def save_to_row_count_table(self, *, checked_results: CheckedResults | None = None, **kwargs) -> DataFrame:
         """Save row count comparison analysis to the count table.
 
         Args:
@@ -243,8 +247,8 @@ class DQEngineExtension:
             )
 
         return {
-            "mismatch": self.save_to_mismatch_table(checked_results),
-            "meta": self.save_to_schema_validation_table(checked_results),
-            "dups": self.save_to_duplicates_table(checked_results),
-            "count": self.save_to_row_count_table(checked_results),
+            "mismatch": self.save_to_mismatch_table(checked_results=checked_results),
+            "meta": self.save_to_schema_validation_table(checked_results=checked_results),
+            "dups": self.save_to_duplicates_table(checked_results=checked_results),
+            "count": self.save_to_row_count_table(checked_results=checked_results),
         }

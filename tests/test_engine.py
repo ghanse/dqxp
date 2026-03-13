@@ -356,7 +356,7 @@ class TestSaveToMismatchTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        result = extension.save_to_mismatch_table(cr)
+        result = extension.save_to_mismatch_table(checked_results=cr)
 
         assert isinstance(result, DataFrame)
         rows = result.collect()
@@ -382,7 +382,7 @@ class TestSaveToMismatchTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        result = extension.save_to_mismatch_table(cr)
+        result = extension.save_to_mismatch_table(checked_results=cr)
 
         rows = result.collect()
         for r in rows:
@@ -403,7 +403,7 @@ class TestSaveToSchemaValidationTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        result = extension.save_to_schema_validation_table(cr)
+        result = extension.save_to_schema_validation_table(checked_results=cr)
 
         assert isinstance(result, DataFrame)
         rows = result.collect()
@@ -427,7 +427,7 @@ class TestSaveToSchemaValidationTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        result = extension.save_to_schema_validation_table(cr)
+        result = extension.save_to_schema_validation_table(checked_results=cr)
 
         for r in result.collect():
             assert r["result"] == "PASS"
@@ -438,7 +438,7 @@ class TestSaveToSchemaValidationTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        result = extension.save_to_schema_validation_table(cr)
+        result = extension.save_to_schema_validation_table(checked_results=cr)
 
         for r in result.collect():
             assert r["table_name"] == "catalog.schema.meta"
@@ -458,7 +458,7 @@ class TestSaveToDuplicatesTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        result = extension.save_to_duplicates_table(cr)
+        result = extension.save_to_duplicates_table(checked_results=cr)
 
         assert isinstance(result, DataFrame)
         assert result.count() == 0
@@ -469,7 +469,7 @@ class TestSaveToDuplicatesTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        result = extension.save_to_duplicates_table(cr)
+        result = extension.save_to_duplicates_table(checked_results=cr)
 
         rows = result.collect()
         assert len(rows) == 1
@@ -492,7 +492,7 @@ class TestSaveToDuplicatesTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        result = extension.save_to_duplicates_table(cr)
+        result = extension.save_to_duplicates_table(checked_results=cr)
 
         for r in result.collect():
             assert r["table_name"] == "catalog.schema.dups"
@@ -512,7 +512,7 @@ class TestSaveToRowCountTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        result = extension.save_to_row_count_table(cr)
+        result = extension.save_to_row_count_table(checked_results=cr)
 
         rows = result.collect()
         assert len(rows) == 1
@@ -526,7 +526,7 @@ class TestSaveToRowCountTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        result = extension.save_to_row_count_table(cr)
+        result = extension.save_to_row_count_table(checked_results=cr)
 
         rows = result.collect()
         assert rows[0]["source_count"] == 2
@@ -540,7 +540,7 @@ class TestSaveToRowCountTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"], threshold=0.5)
 
-        result = extension.save_to_row_count_table(cr)
+        result = extension.save_to_row_count_table(checked_results=cr)
 
         rows = result.collect()
         assert rows[0]["threshold"] == 0.5
@@ -562,7 +562,7 @@ class TestSaveToRowCountTable:
         _setup_engine_split(mock_engine, source, simple_schema_3col)
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        result = extension.save_to_row_count_table(cr)
+        result = extension.save_to_row_count_table(checked_results=cr)
 
         for r in result.collect():
             assert r["table_name"] == "catalog.schema.count"
@@ -583,10 +583,10 @@ class TestCheckedResultsReuse:
 
         cr = extension.get_checked_results(source, target, [], ["id"])
 
-        mismatch = extension.save_to_mismatch_table(cr)
-        meta = extension.save_to_schema_validation_table(cr)
-        dups = extension.save_to_duplicates_table(cr)
-        count = extension.save_to_row_count_table(cr)
+        mismatch = extension.save_to_mismatch_table(checked_results=cr)
+        meta = extension.save_to_schema_validation_table(checked_results=cr)
+        dups = extension.save_to_duplicates_table(checked_results=cr)
+        count = extension.save_to_row_count_table(checked_results=cr)
 
         # Engine should only have been called once
         assert mock_engine.apply_checks_and_split.call_count == 1
