@@ -12,7 +12,7 @@ from dqxp.writers.mismatch import MISMATCH_SCHEMA
 
 @pytest.fixture()
 def mock_engine(spark):
-    """Create a mock DQEngineCore with a real SparkSession."""
+    """Create a mock DQEngine with a real SparkSession."""
     engine = MagicMock()
     engine.spark = spark
     return engine
@@ -285,10 +285,7 @@ class TestApplyChecksAndSaveOutputTables:
             key_columns=["id"],
         )
 
-        mock_engine.save_results_in_table.assert_called_once()
-        call_kwargs = mock_engine.save_results_in_table.call_args[1]
-        assert call_kwargs["output_df"] is None
-        assert call_kwargs["quarantine_df"] is None
+        mock_engine.save_results_in_table.assert_not_called()
         assert set(result.keys()) == {"mismatch", "meta", "dups", "count"}
 
     def test_quarantine_passes_df_when_table_provided(self, spark, extension, mock_engine, id_name_schema):

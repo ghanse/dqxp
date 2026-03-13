@@ -100,12 +100,13 @@ class DQEngineExtension:
             extra_kwargs["ref_dfs"] = ref_dfs
         good_df, bad_df = self._engine.apply_checks_and_split(source_df, checks, **extra_kwargs)
 
-        self._engine.save_results_in_table(
-            output_df=good_df if output_table else None,
-            quarantine_df=bad_df if quarantine_table else None,
-            output_config=OutputConfig(location=output_table) if output_table else None,
-            quarantine_config=OutputConfig(location=quarantine_table) if quarantine_table else None,
-        )
+        if output_table or quarantine_table:
+            self._engine.save_results_in_table(
+                output_df=good_df if output_table else None,
+                quarantine_df=bad_df if quarantine_table else None,
+                output_config=OutputConfig(location=output_table) if output_table else None,
+                quarantine_config=OutputConfig(location=quarantine_table) if quarantine_table else None,
+            )
 
         mismatch_df = self._mismatch_writer.write(spark, source_df, target_df, key_columns, self._mismatch_table)
         meta_df = self._meta_writer.write(spark, source_df, target_df, key_columns, self._meta_table)
