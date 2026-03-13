@@ -1,0 +1,57 @@
+name: build
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  merge_group:
+    types: [checks_requested]
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          cache: 'pip'
+          cache-dependency-path: '**/pyproject.toml'
+          python-version: '3.11'
+
+      - name: Format all files
+        run: |
+          pip install hatch
+          make dev fmt
+
+      - name: Fail on differences
+        run: git diff --exit-code
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        pyVersion: [ '3.11', '3.12', '3.13' ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          cache: 'pip'
+          cache-dependency-path: '**/pyproject.toml'
+          python-version: ${{ matrix.pyVersion }}
+
+      - name: Run unit tests
+        run: |
+          pip install hatch
+          make dev test
